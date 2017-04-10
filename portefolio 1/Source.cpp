@@ -118,7 +118,7 @@ int main() {
 	// d1
 	VecDoub var_d1(4);
 	for (int j = 0; j < 4; j++) {
-		var_d1[j] = pow(svd_d1.v[0][0] / svd_d1.w[0], 2);
+		var_d1[j] = pow(svd_d1.v[j][0] / svd_d1.w[0], 2);
 		for (int i = 1; i < 4; i++)
 			var_d1[j] = var_d1[j] + pow(svd_d1.v[j][i] / svd_d1.w[i], 2);
 	}
@@ -126,7 +126,7 @@ int main() {
 	// d2
 	VecDoub var_d2(4);
 	for (int j = 0; j < 4; j++) {
-		var_d2[j] = pow(svd_d2.v[0][0] / svd_d2.w[0], 2);
+		var_d2[j] = pow(svd_d2.v[j][0] / svd_d2.w[0], 2);
 		for (int i = 1; i < 4; i++)
 			var_d2[j] = var_d2[j] + pow(svd_d2.v[j][i] / svd_d2.w[i], 2);
 	}
