@@ -1,53 +1,78 @@
 #include <Numerical code\nr3.h>
 #include <Numerical code\quadrature.h>
+#include <Numerical code\roots.h>
+#include <Numerical code\mins.h>
 #include <math.h>
+#include <iostream>
+#include <fstream>
 
 Doub Y = 0.1;
+Doub x;
 
 template<class T>
-struct MyTrapzd : Quadrature {
-	Doub a, b, s;
-	T &func;
-	MyTrapzd() {};
-	MyTrapzd(T &funcc, const Doub aa, const Doub bb) :
-		func(funcc), a(aa), b(bb) {
-		n = 0;
+Doub trapezoidalIntegral(T &func, const Doub a, const Doub b, int N) {
+	Doub h = (b - a) / N;
+	Doub res;
+
+	res = 0.5 * (func(a) + func(b)); // Add ends to sum
+
+	for (int i = 0; i < N; i++) { // Add inbetween parts
+		res = res + func(a + h + (i*h));
 	}
-	Doub next() {
-		Doub x, tnm, sum, del;
-		Int it, j;
-		n++;
-		if (n == 1) {
-			//std::cout << "Number of traps: " << 1 << std::endl;
-			return (s = 0.5*(b - a)*(func(a) + func(b)));
-		}
-		else {
-			for (it = 1, j = 1;j<n - 1;j++) it <<= 1;
-			tnm = it;
-			//std::cout << "Number of traps: " << tnm*2 << std::endl;
-			del = (b - a) / tnm;
-			x = a + 0.5*del;
-			for (sum = 0.0, j = 0;j<it;j++, x += del) sum += func(x);
-			s = 0.5*(s + (b - a)*sum / tnm);
-			return s;
-		}
-	}
-};
+
+	res = res * h; // Multiply by h
+
+	return res;
+}
 
 template<class T>
-Doub Myqtrap(T &func, const Doub a, const Doub b, const Doub eps = 1.0e-10) {
-	const Int JMAX = 20;
-	Doub s, olds = 0.0;
-	MyTrapzd<T> t(func, a, b);
-	for (Int j = 0;j<JMAX;j++) {
-		s = t.next();
-		//std::cout << "I ran again with j = " << j << " and s = " << s << std::endl;
-		if (j > 5)
-			if (abs(s - olds) < eps*abs(olds) ||
-				(s == 0.0 && olds == 0.0)) return s;
-		olds = s;
-	}
-	throw("Too many steps in routine qtrap");
+Doub RE(T &func, const Doub a, const Doub b, int N) {
+	if (N < 1 || N % 2 == 1)
+		return 1;
+
+	Doub Ah1 = trapezoidalIntegral(func, a, b, (N / 2));
+	Doub Ah2 = trapezoidalIntegral(func, a, b, N);
+
+	return Ah2 + ((Ah2 - Ah1) / 3);
+}
+
+template<class T>
+Doub estimateErrorTrap(T &func, const Doub a, const Doub b, int N) {
+	if (N == 1) // Catch for bad N
+		return 1;
+
+	Doub h2 = (b - a) / N;
+	Doub h1 = (b - a) / (N / 2);
+	Doub Ah2 = trapezoidalIntegral(func, a, b, N);
+	Doub Ah1 = trapezoidalIntegral(func, a, b, N / 2);
+	Doub alpha = h1 / h2;
+
+
+	Doub error = (Ah1 - Ah2) / (pow(alpha, 2) - 1);
+
+	return error;
+}
+
+template<class T>
+Doub estimateErrorRE(T &func, const Doub a, const Doub b, int N) {
+	if (N == 1) // Catch for bad N
+		return 1;
+
+	Doub Ah2 = RE(func, a, b, N);
+	Doub Ah1 = RE(func, a, b, N / 2);
+
+	Doub error = (Ah1 - Ah2) / 15;
+
+	return error;
+}
+
+template<class T>
+Doub calcOrder(T &func, const Doub a, const Doub b, int N) {
+	Doub Ah1 = trapezoidalIntegral(func, a, b, N);
+	Doub Ah2 = trapezoidalIntegral(func, a, b, N * 2);
+	Doub Ah3 = trapezoidalIntegral(func, a, b, N * 4);
+
+	return log2((Ah1 - Ah2) / (Ah2 - Ah3));
 }
 
 Doub f(Doub gamma) {
@@ -64,7 +89,7 @@ Doub integralFunc(Doub t) {
 	return 0.744 * pow(bigGamma, 3) * f(bigGamma);
 }
 
-Doub c(Doub inputY) {
+Doub cTrap(Doub inputY, int N) {
 	if (abs(inputY) > (Doub)0.2)
 		return (Doub)0.0;
 
@@ -73,10 +98,11 @@ Doub c(Doub inputY) {
 	Y = inputY;
 
 	Doub alpha = (Doub)0.05 * sqrt((Doub)1 - (pow(inputY, (Doub)2) / (Doub)0.04));
-	std::cout << "alpha: " << alpha << std::endl;
+	//std::cout << "Alpha: " << alpha << std::endl;
 
-	Doub res = Myqtrap(integralFunc, -alpha, alpha, 0.001);
-	std::cout << "qtrap: " << res << std::endl;
+	Doub res = trapezoidalIntegral(integralFunc, -alpha, alpha, N);
+	//std::cout << "Estimated integral: " << res << std::endl;
+	//std::cout << "Estimated error: " << estimateErrorTrap(integralFunc, -alpha, alpha, N) << std::endl;
 
 	res = ((Doub)1 / (Doub)1200) * res;
 	//std::cout << "res: " << res << std::endl;
@@ -84,59 +110,145 @@ Doub c(Doub inputY) {
 	return res;
 }
 
-template<class T>
-Doub estimateIntegral(int N, Doub inputY, T func) {
-	Doub alpha = (Doub)0.05 * sqrt((Doub)1 - (pow(inputY, (Doub)2) / (Doub)0.04));
-	MyTrapzd<T> tmp(func, -alpha, alpha);
-	Doub res = 0;
+Doub cRE(Doub inputY, int N) {
+	if (abs(inputY) > (Doub)0.2)
+		return (Doub)0.0;
+
+	//std::cout << "I made it past catch" << std::endl;
 
 	Y = inputY;
 
-	for (int i = 0; i < N; i++) {
-		res = tmp.next();
-	}
+	Doub alpha = (Doub)0.05 * sqrt((Doub)1 - (pow(inputY, (Doub)2) / (Doub)0.04));
+	std::cout << "Alpha: " << alpha << std::endl;
+
+	std::cout << "Estimated order: " << calcOrder(integralFunc, -alpha, alpha, N) << std::endl;
+
+	Doub res = RE(integralFunc, -alpha, alpha, N);
+	std::cout << "Estimated integral: " << res << std::endl;
+	std::cout << "Estimated error: " << estimateErrorRE(integralFunc, -alpha, alpha, N) << std::endl;
+
+	res = ((Doub)1 / (Doub)1200) * res;
+	//std::cout << "res: " << res << std::endl;
+
 	return res;
 }
 
-Doub calcOrder(int startN, Doub inputY) {
-	Doub h1 = estimateIntegral(startN, inputY, integralFunc);
-	Doub h2 = estimateIntegral(startN+1, inputY, integralFunc);
-	Doub h3 = estimateIntegral(startN+2, inputY, integralFunc);
-
-	return sqrt((h1 - h2) / (h2 - h3));
+Doub calcAlpha(Doub inputY) {
+	Doub alpha = (Doub)0.05 * sqrt((Doub)1 - (pow(inputY, (Doub)2) / (Doub)0.04));
+	return alpha;
 }
 
-Doub calcRE(Doub h1, Doub h2) {
-	return h2 + ((h2 - h1) / 3);
+Doub minfunc(Doub Yi) {
+	return cTrap(Yi, 100) + cTrap(x - Yi, 100);
+}
+
+Doub minifunc(Doub ix) {
+	Doub Y = 0.1;
+	Golden g;
+
+	x = ix;
+
+	g.bracket(0.0, x, minfunc);
+	Doub min = g.minimize(minfunc);
+
+	std::cout << "d: " << x << std::endl;
+	std::cout << "cTrap1: " << cTrap(Y, 100) * 1000000 << std::endl;
+	std::cout << "cTrap2: " << cTrap(x - Y, 100) * 1000000 << std::endl;
+	std::cout << "min: " << min * 1000000 << std::endl;
+	//std::cout << "sum: " << (cTrap(Y, 100) + cTrap(x - Y, 100)) * 1000000 << std::endl;
+	std::cout << "sum: " << (min - (30 / 1000000)) * 1000000 << std::endl;
+	std::cout << std::endl;
+
+	return min - (30.0 / 1000000);
+}
+
+Doub minifunc2(Doub d) {
+
+	//std::cout << "cTrap1: " << cTrap(Y, 100) * 1000000 << std::endl;
+	//std::cout << "cTrap2: " << cTrap(d - Y, 100) * 1000000 << std::endl;
+
+
+	// Brute min
+	Doub acc = 0.00001;
+	Doub min = cTrap(0, 100) + cTrap(d - 0, 100);
+	Doub newMin;
+	Doub Yi = 0;
+	for (int i = 1; i < d / acc; i++) {
+		Yi = Yi + acc;
+		newMin = cTrap(Yi, 100) + cTrap(d - Yi, 100);
+		if (newMin < min)
+			min = newMin;
+	}
+
+	std::cout << "d: " << setprecision(15) << d << std::endl;
+	std::cout << "min: " << setprecision(15) << min * 1000000 << std::endl;
+	std::cout << "res: " << setprecision(15) << (min - (30.0 / 1000000)) * 1000000 << std::endl;
+	std::cout << std::endl;
+
+	return min - (30.0 / 1000000);
 }
 
 
 int main() {
-	std::cout << "Calculations with trap:" << std::endl;
-	std::cout << "res with trap: " << c(0.1) * 1000000 << " micrometer" << std::endl;
+
+	///*
+	int i = 8;
+
+	std::cout << "Calculation of c with trap, N = " << i << ": " << std::endl;
+	std::cout << "res with trap: " << cTrap(0.1, i) * 1000000 << " micrometer" << std::endl;
 	std::cout << std::endl;
 
-	std::cout << "Calculations with RE:" << std::endl;
-	std::cout << "RE: " << calcRE(estimateIntegral(3, 0.1, integralFunc), estimateIntegral(4, 0.1, integralFunc)) << std::endl;
-	std::cout << "res with RE: " << ((Doub)1 / (Doub)1200) * calcRE(estimateIntegral(3, 0.1, integralFunc), estimateIntegral(4, 0.1, integralFunc)) * 1000000 << " micrometer" << std::endl;
+	std::cout << "Calculation of c with RE, N = " << i << ": " << std::endl;
+	std::cout << "res with trap: " << cRE(0.1, i) * 1000000 << " micrometer" << std::endl;
 	std::cout << std::endl;
+	//*/
 
-	std::cout << "Convergence of integral from trap and RE:" << std::endl;
-	std::cout << "N=1   Trap: " << estimateIntegral(1, (Doub)0.1, integralFunc) << std::endl;
-	std::cout << "N=2   Trap: " << estimateIntegral(2, (Doub)0.1, integralFunc) << "	RE: " << calcRE(estimateIntegral(1, 0.1, integralFunc), estimateIntegral(2, 0.1, integralFunc)) << std::endl;
-	std::cout << "N=3   Trap: " << estimateIntegral(3, (Doub)0.1, integralFunc) << "	RE: " << calcRE(estimateIntegral(2, 0.1, integralFunc), estimateIntegral(3, 0.1, integralFunc)) << std::endl;
-	std::cout << "N=4   Trap: " << estimateIntegral(4, (Doub)0.1, integralFunc) << "	RE: " << calcRE(estimateIntegral(3, 0.1, integralFunc), estimateIntegral(4, 0.1, integralFunc)) << std::endl;
-	std::cout << "N=5   Trap: " << estimateIntegral(5, (Doub)0.1, integralFunc) << "	RE: " << calcRE(estimateIntegral(4, 0.1, integralFunc), estimateIntegral(5, 0.1, integralFunc)) << std::endl;
-	std::cout << "N=6   Trap: " << estimateIntegral(6, (Doub)0.1, integralFunc) << "	RE: " << calcRE(estimateIntegral(5, 0.1, integralFunc), estimateIntegral(6, 0.1, integralFunc)) << std::endl;
-	std::cout << std::endl;
+	/*
 
-	std::cout << "Convergence of order:" << std::endl;
-	std::cout << "order estimate: " << calcOrder(1, 0.1) << std::endl;
-	std::cout << "order estimate: " << calcOrder(2, 0.1) << std::endl;
-	std::cout << "order estimate: " << calcOrder(3, 0.1) << std::endl;
-	std::cout << std::endl;
+	for (int i = 2; i < 12; i = i + 2) {
+		std::cout << "Calculation of c with trap, N = " << i << ": " << std::endl;
+		std::cout << "res with trap: " << cTrap(0.1, i) * 1000000 << " micrometer" << std::endl;
+		std::cout << std::endl;
 
+		std::cout << "Calculation of c with RE, N = " << i << ": " << std::endl;
+		std::cout << "res with trap: " << cRE(0.1, i) * 1000000 << " micrometer" << std::endl;
+		std::cout << std::endl;
+	}
 
+	*/
+	/*
+	Doub Yi;
+	int N;
+	ofstream outputFile;
+	std::string data3 = "dataFor3.csv";
+	outputFile.open(data3);
+
+	//outputFile << "i" << "," << "Yi" << "," << "c(Yi)" << std::endl;
+
+	for (Doub i = 0; i < 50; i++) {
+		Yi = (i / 50.0)*0.2;
+		N = round((2 * calcAlpha(Yi)) / 0.001);
+		
+		//std::cout << "i: " << i << "	Yi: " << Yi << "	c(Yi): " << cTrap(Yi, N) * 1000000 << std::endl;
+		outputFile << i << "," << Yi << "," << cTrap(Yi, N) * 1000000 << std::endl;
+	}
+
+	outputFile.close();
+
+	std::string data4 = "dataFor4.csv";
+	outputFile.open(data4);
+
+	for (Doub i = 0; i < 50; i++) {
+		Yi = (i / 50.0) * 0.2;
+		N = round((2 * calcAlpha(Yi)) / 0.001);
+		
+		outputFile << i << "," << Yi << "," << ((cTrap(Yi, 100) + cTrap(0.234389134310186 - Yi, 100)) * 1000000) << std::endl;
+	}
+
+	outputFile.close();
+
+	std::cout << "Sex mig i røven: " << setprecision(15) << rtbis(minifunc2, 0.2, 0.3, pow(10, -10)) << std::endl;
+	*/
 
 
 	return 1;
